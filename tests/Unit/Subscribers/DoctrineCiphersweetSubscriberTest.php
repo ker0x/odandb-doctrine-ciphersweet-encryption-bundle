@@ -10,13 +10,15 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 class DoctrineCiphersweetSubscriberTest extends KernelTestCase
 {
-    public function testProcessFields()
+    public function testProcessFields(): void
     {
         static::bootKernel();
 
         /** @var EntityManagerInterface $em */
         $em = static::getContainer()->get(EntityManagerInterface::class);
+        /** @var EncryptorInterface $encryptor */
         $encryptor = static::getContainer()->get(EncryptorInterface::class);
+        /** @var DoctrineCiphersweetSubscriber $service */
         $service = static::getContainer()->get(DoctrineCiphersweetSubscriber::class);
         $this->assertNotNull($service);
 

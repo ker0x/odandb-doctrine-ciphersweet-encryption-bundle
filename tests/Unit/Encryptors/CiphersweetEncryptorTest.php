@@ -23,13 +23,13 @@ class CiphersweetEncryptorTest extends TestCase
         $this->encryptor = new CiphersweetEncryptorObservable($engine);
     }
 
-    public function testGetBlindIndex()
+    public function testGetBlindIndex(): void
     {
         $bi = $this->encryptor->getBlindIndex('my_entity', 'account_name', 'test');
         $this->assertSame(8, mb_strlen($bi));
     }
 
-    public function testPrepareForStorage()
+    public function testPrepareForStorage(): void
     {
         $this->encryptor->prepareForStorage(new MyEntity('132456'), 'account_name', 'test1');
         $this->encryptor->prepareForStorage(new MyEntity('132456'), 'account_name', 'test1');
@@ -42,12 +42,12 @@ class CiphersweetEncryptorTest extends TestCase
         $this->assertSame(1, $this->encryptor->callsCount['encrypt']);
     }
 
-    public function testGetPrefix()
+    public function testGetPrefix(): void
     {
         $this->assertSame('nacl:', $this->encryptor->getPrefix());
     }
 
-    public function testDecrypt()
+    public function testDecrypt(): void
     {
         [$encryptedString] = $this->encryptor->prepareForStorage(new MyEntity('132456'), 'account_name', 'test');
 

@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-
 namespace Odandb\DoctrineCiphersweetEncryptionBundle\Services;
-
 
 use Odandb\DoctrineCiphersweetEncryptionBundle\Encryptors\EncryptorInterface;
 use Odandb\DoctrineCiphersweetEncryptionBundle\Exception\UndefinedGeneratorException;
@@ -16,13 +14,10 @@ use Symfony\Contracts\Service\ServiceSubscriberInterface;
 
 class IndexesGenerator implements ServiceSubscriberInterface
 {
-    protected EncryptorInterface $encryptor;
-    protected ContainerInterface $container;
-
-    public function __construct(ContainerInterface $container, EncryptorInterface $encryptor)
-    {
-        $this->container = $container;
-        $this->encryptor = $encryptor;
+    public function __construct(
+        protected ContainerInterface $container,
+        protected EncryptorInterface $encryptor,
+    ) {
     }
 
     /**
@@ -64,23 +59,16 @@ class IndexesGenerator implements ServiceSubscriberInterface
         return $possibleValuesAr;
     }
 
-    /**
-     * @param string $entityName
-     * @param string $fieldname
-     * @param string[] $possibleValues
-     * @param bool $fastIndexing
-     * @return array
-     */
-    public function generateBlindIndexesFromPossibleValues(string $entityName, string $fieldname, array $possibleValues, bool $fastIndexing): array
+    public function generateBlindIndexesFromPossibleValues(string $entityName, string $fieldName, array $possibleValues, bool $fastIndexing): array
     {
         $possibleValues = array_unique($possibleValues);
 
         $indexes = [];
-        foreach ($possibleValues as $pvalue) {
-            if ($pvalue === '' || $pvalue === null) {
+        foreach ($possibleValues as $pValue) {
+            if ($pValue === '' || $pValue === null) {
                 continue;
             }
-            $indexes[] = $this->encryptor->getBlindIndex($entityName, $fieldname, $pvalue, EncryptorInterface::DEFAULT_FILTER_BITS, $fastIndexing);
+            $indexes[] = $this->encryptor->getBlindIndex($entityName, $fieldName, $pValue, EncryptorInterface::DEFAULT_FILTER_BITS, $fastIndexing);
         }
 
         return $indexes;

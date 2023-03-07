@@ -2,16 +2,11 @@
 
 declare(strict_types=1);
 
-
-namespace Odandb\DoctrineCiphersweetEncryptionBundle\Configuration;
+namespace Odandb\DoctrineCiphersweetEncryptionBundle\Attribute;
 
 use Odandb\DoctrineCiphersweetEncryptionBundle\Encryptors\EncryptorInterface;
 
-/**
- * The Encrypted class handles the @IndexableField annotation.
- *
- * @Annotation
- */
+#[\Attribute(\Attribute::TARGET_PROPERTY)]
 class IndexableField
 {
     public bool $autoRefresh = true;

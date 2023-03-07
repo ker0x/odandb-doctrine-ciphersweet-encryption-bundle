@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-
 namespace Odandb\DoctrineCiphersweetEncryptionBundle\Command;
 
 use Odandb\DoctrineCiphersweetEncryptionBundle\Services\IndexableFieldsService;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -15,11 +15,13 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Process\PhpExecutableFinder;
 use Symfony\Component\Process\Process;
 
+#[AsCommand(
+    name: 'odb:enc:indexes',
+    description: 'Determine the Blind Index plan for a given field.',
+    aliases: ['o:e:i']
+)]
 class GenerateIndexesCommand extends Command
 {
-    protected static $defaultName = 'odb:enc:indexes';
-    protected static $defaultAlias = 'o:e:i';
-
     protected const CONSOLE_ENTRYPOINT = 'bin/console';
     protected const NB_RUNNING_PROCESSES = 5;
     protected const CHUNCKS = 50;
@@ -27,31 +29,22 @@ class GenerateIndexesCommand extends Command
 
     protected SymfonyStyle $io;
 
-    protected IndexableFieldsService $indexableFieldsService;
-
-    public function __construct(IndexableFieldsService $indexableFieldsService, string $name = null)
+    public function __construct(protected IndexableFieldsService $indexableFieldsService)
     {
-        parent::__construct($name);
-
-        $this->indexableFieldsService = $indexableFieldsService;
+        parent::__construct();
     }
 
     protected function configure(): void
     {
         $this
-            ->setDescription('Determine the Blind Index plan for a given field.')
-            ->setAliases([self::$defaultAlias])
             ->addArgument('class', InputArgument::REQUIRED, 'The entity class having fields that need a complete indexes recalculation.')
-
             ->addOption('fieldnames', 'f', InputOption::VALUE_OPTIONAL, 'Fieldnames (separated by commas) to target if you don\'t want to flush the entire indexes.', null)
             ->addOption('ids', 'i', InputOption::VALUE_OPTIONAL, 'List of ids (separated by commas) if you don\'t want to flush the entire indexes for the targetted class.', null)
-            ->addOption('purge', 'p', InputOption::VALUE_NONE, 'Purge existing indexes ?' )
-
-            ->addOption('parallel', 'l', InputOption::VALUE_NONE, 'Can this run be executed in parallel ?' )
+            ->addOption('purge', 'p', InputOption::VALUE_NONE, 'Purge existing indexes ?')
+            ->addOption('parallel', 'l', InputOption::VALUE_NONE, 'Can this run be executed in parallel ?')
             ->addOption('nb-subprocess', 's', InputOption::VALUE_REQUIRED, 'In case of parallel mode, how many sub-processes can be run.', static::NB_RUNNING_PROCESSES)
             ->addOption('subprocess-timeout', 't', InputOption::VALUE_REQUIRED, 'Timeout of subprocesses', static::SUBPROCESS_TIMEOUT)
-            ->addOption('chuncks', 'c', InputOption::VALUE_REQUIRED, 'In case of parallel execution, chuncks length of entity ids', static::CHUNCKS)
-        ;
+            ->addOption('chuncks', 'c', InputOption::VALUE_REQUIRED, 'In case of parallel execution, chuncks length of entity ids', static::CHUNCKS);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -77,20 +70,20 @@ class GenerateIndexesCommand extends Command
                     'They must be of type int and greater than 0.'
                 ]);
 
-                return 1;
+                return Command::FAILURE;
             }
 
             $parallelConfig = [
-                'nb_process' => (int) $input->getOption('nb-subprocess'),
-                'timeout' => (int) $input->getOption('subprocess-timeout'),
-                'chuncks' => (int) $input->getOption('chuncks'),
+                'nb_process' => (int)$input->getOption('nb-subprocess'),
+                'timeout' => (int)$input->getOption('subprocess-timeout'),
+                'chuncks' => (int)$input->getOption('chuncks'),
             ];
             $this->initAndRunFiltersGenerationSubProcesses($className, $parallelConfig);
         } else {
             $this->regenerateFiltersByFieldnameAndIds($className, $fieldnames, $ids, $purge);
         }
 
-        return 0;
+        return Command::SUCCESS;
     }
 
     protected function validateParallelOptions(InputInterface $input): array
@@ -99,8 +92,8 @@ class GenerateIndexesCommand extends Command
 
         foreach (['nb-subprocess', 'subprocess-timeout', 'chuncks'] as $optionName) {
             $value = $input->getOption($optionName);
-            if (!is_numeric($value) || ((int) $value) < 1) {
-                $optionsInError[]=$optionName;
+            if (!is_numeric($value) || ((int)$value) < 1) {
+                $optionsInError[] = $optionName;
             }
         }
 
@@ -123,11 +116,11 @@ class GenerateIndexesCommand extends Command
         $i = 0;
 
         foreach ($chuncks as $chunck) {
-            $process = new Process([$phpBinaryPath, static::CONSOLE_ENTRYPOINT, static::$defaultName, $className, '--ids='.implode(',', $chunck)]);
+            $process = new Process([$phpBinaryPath, static::CONSOLE_ENTRYPOINT, static::getDefaultName(), $className, '--ids=' . implode(',', $chunck)]);
             $process->setTimeout($parallelConfig['timeout']);
             $process->setTty(Process::isTtySupported());
 
-            $pools[]=$process;
+            $pools[] = $process;
             $process->start();
 
             if (++$i % $parallelConfig['nb_process'] === 0) {
@@ -140,7 +133,7 @@ class GenerateIndexesCommand extends Command
             $this->runProcesses($pools);
         }
 
-        $this->io->success('Done in ' . (time() - $start).'s');
+        $this->io->success('Done in ' . (time() - $start) . 's');
     }
 
     private function runProcesses(array $pools): void

@@ -2,35 +2,24 @@
 
 declare(strict_types=1);
 
-
 namespace Odandb\DoctrineCiphersweetEncryptionBundle\Subscribers;
 
-use Odandb\DoctrineCiphersweetEncryptionBundle\Configuration\EncryptedField;
-use Odandb\DoctrineCiphersweetEncryptionBundle\Configuration\IndexableField;
+use Doctrine\ORM\Event\PostLoadEventArgs;
+use Odandb\DoctrineCiphersweetEncryptionBundle\Attribute\EncryptedField;
+use Odandb\DoctrineCiphersweetEncryptionBundle\Attribute\IndexableField;
 use Odandb\DoctrineCiphersweetEncryptionBundle\Encryptors\EncryptorInterface;
 use Odandb\DoctrineCiphersweetEncryptionBundle\Services\IndexableFieldsService;
 use Odandb\DoctrineCiphersweetEncryptionBundle\Services\PropertyHydratorService;
-use Doctrine\Common\Annotations\Reader;
 use Doctrine\Common\EventSubscriber;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Event\LifecycleEventArgs;
 use Doctrine\ORM\Event\OnClearEventArgs;
 use Doctrine\ORM\Event\OnFlushEventArgs;
 use Doctrine\ORM\Event\PostFlushEventArgs;
 use Doctrine\ORM\Events;
 
-/**
- *
- */
 class DoctrineCiphersweetSubscriber implements EventSubscriber
 {
-    public const ENCRYPTED_ANN_NAME = EncryptedField::class;
-    public const INDEXABLE_ANN_NAME = IndexableField::class;
-
-    private EncryptorInterface $encryptor;
-    private Reader $annReader;
-
-    public array $_originalValues = [];
+    public array $originalValues = [];
 
     private array $decodedRegistry = [];
     /**
@@ -48,24 +37,11 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
 
     private array $entitiesToEncrypt = [];
 
-    private IndexableFieldsService $indexableFieldsService;
-
-    private PropertyHydratorService $propertyHydratorService;
-
-    /**
-     * Initialization of subscriber.
-     */
     public function __construct(
-        Reader                  $annReader,
-        EncryptorInterface      $encryptorClass,
-        IndexableFieldsService  $indexableFieldsService,
-        PropertyHydratorService $propertyHydratorService
-    )
-    {
-        $this->annReader = $annReader;
-        $this->encryptor = $encryptorClass;
-        $this->indexableFieldsService = $indexableFieldsService;
-        $this->propertyHydratorService = $propertyHydratorService;
+        private readonly EncryptorInterface $encryptor,
+        private readonly IndexableFieldsService $indexableFieldsService,
+        private readonly PropertyHydratorService $propertyHydratorService
+    ) {
     }
 
     /**
@@ -73,33 +49,33 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
      */
     public function onFlush(OnFlushEventArgs $args): void
     {
-        $em = $args->getEntityManager();
+        $em = $args->getObjectManager();
         $unitOfWork = $em->getUnitOfWork();
 
         $this->postFlushDecryptQueue = [];
 
         foreach ($unitOfWork->getScheduledEntityInsertions() as $entity) {
             $this->entityOnFlush($entity, $em);
-            $unitOfWork->recomputeSingleEntityChangeSet($em->getClassMetadata(\get_class($entity)), $entity);
+            $unitOfWork->recomputeSingleEntityChangeSet($em->getClassMetadata($entity::class), $entity);
         }
 
         foreach ($unitOfWork->getScheduledEntityUpdates() as $entity) {
             $this->entityOnFlush($entity, $em);
-            $unitOfWork->recomputeSingleEntityChangeSet($em->getClassMetadata(\get_class($entity)), $entity);
+            $unitOfWork->recomputeSingleEntityChangeSet($em->getClassMetadata($entity::class), $entity);
             unset($this->entitiesToEncrypt[spl_object_id($entity)]);
         }
 
         foreach ($this->entitiesToEncrypt as $entity) {
             $this->entityOnFlush($entity, $em);
-            $unitOfWork->recomputeSingleEntityChangeSet($em->getClassMetadata(\get_class($entity)), $entity);
+            $unitOfWork->recomputeSingleEntityChangeSet($em->getClassMetadata($entity::class), $entity);
         }
     }
 
     public function onClear(OnClearEventArgs $args): void
     {
-        unset($this->_originalValues, $this->decodedRegistry, $this->encryptedFieldCache, $this->postFlushDecryptQueue);
+        unset($this->originalValues, $this->decodedRegistry, $this->encryptedFieldCache, $this->postFlushDecryptQueue);
 
-        $this->_originalValues = [];
+        $this->originalValues = [];
         $this->decodedRegistry = [];
         $this->encryptedFieldCache = [];
         $this->postFlushDecryptQueue = [];
@@ -132,14 +108,11 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
     }
 
     /**
-     * @param object $entity
-     * @param EntityManagerInterface $em
-     *
      * @return \ReflectionProperty[]
      */
     private function getEncryptedFields(object $entity, EntityManagerInterface $em): array
     {
-        $className = \get_class($entity);
+        $className = $entity::class;
 
         if (isset($this->encryptedFieldCache[$className])) {
             return $this->encryptedFieldCache[$className];
@@ -149,8 +122,7 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
         $encryptedFields = [];
 
         foreach ($meta->getReflectionProperties() as $refProperty) {
-            /** @var \ReflectionProperty $refProperty */
-            if ($this->annReader->getPropertyAnnotation($refProperty, self::ENCRYPTED_ANN_NAME)) {
+            if ($refProperty->getAttributes(EncryptedField::class)) {
                 $refProperty->setAccessible(true);
                 $encryptedFields[] = $refProperty;
             }
@@ -210,8 +182,8 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
 
     private function buildContext(string $entityClassName, \ReflectionProperty $refProperty): array
     {
-        $annotationConfig = $this->annReader->getPropertyAnnotation($refProperty, self::ENCRYPTED_ANN_NAME);
-        $indexableAnnotationConfig = $this->annReader->getPropertyAnnotation($refProperty, self::INDEXABLE_ANN_NAME);
+        $annotationConfig = $refProperty->getAttributes(EncryptedField::class)[0] ?? null;
+        $indexableAnnotationConfig = $refProperty->getAttributes(IndexableField::class)[0] ?? null;
 
         $storeBlindIndex = true;
         $filterBits = EncryptorInterface::DEFAULT_FILTER_BITS;
@@ -235,18 +207,10 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
     }
 
     /**
-     * @param object $entity
-     * @param int $oid
-     * @param mixed $value
-     * @param \ReflectionProperty $refProperty
-     * @param array $context
-     * @param string|null $force
-     * @return mixed|string|null
-     *
      * @throws \Odandb\DoctrineCiphersweetEncryptionBundle\Exception\UndefinedGeneratorException
      * @throws \ReflectionException
      */
-    private function handleEncryptOperation(object $entity, int $oid, $value, \ReflectionProperty $refProperty, array $context, ?string $force = null)
+    private function handleEncryptOperation(object $entity, int $oid, mixed $value, \ReflectionProperty $refProperty, array $context, ?string $force = null): mixed
     {
         /**
          * @var IndexableField $indexableAnnotationConfig
@@ -268,8 +232,8 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
             $value = $this->storeValue($entity, $refProperty, $value, $storeBlindIndex, $filterBits, $indexableAnnotationConfig->fastIndexing ?? EncryptorInterface::DEFAULT_FAST_INDEXING);
             $this->storeIndexes($entity, $refProperty, $indexableAnnotationConfig, $originalValue);
         } else {
-            if (isset($this->_originalValues[$oid][$refProperty->getName()])) {
-                $oldValue = $this->_originalValues[$oid][$refProperty->getName()];
+            if (isset($this->originalValues[$oid][$refProperty->getName()])) {
+                $oldValue = $this->originalValues[$oid][$refProperty->getName()];
 
                 if ($this->isValueEncrypted($oldValue)) {
                     $oldValue = $this->encryptor->decrypt($entityClassName, $refProperty->getName(), $oldValue, $filterBits, $indexableAnnotationConfig->fastIndexing ?? EncryptorInterface::DEFAULT_FAST_INDEXING);
@@ -290,14 +254,7 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
         return $value;
     }
 
-    /**
-     * @param int $oid
-     * @param mixed $value
-     * @param \ReflectionProperty $refProperty
-     * @param array $context
-     * @return string
-     */
-    private function handleDecryptOperation(int $oid, $value, \ReflectionProperty $refProperty, array $context): string
+    private function handleDecryptOperation(int $oid, mixed $value, \ReflectionProperty $refProperty, array $context): string
     {
         /**
          * @var IndexableField $indexableAnnotationConfig
@@ -310,7 +267,7 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
             'entityClassName' => $entityClassName,
         ] = $context;
 
-        $this->_originalValues[$oid][$refProperty->getName()] = $value;
+        $this->originalValues[$oid][$refProperty->getName()] = $value;
 
         if ($this->isValueEncrypted($value)) {
             $value = $this->encryptor->decrypt($entityClassName, $refProperty->getName(), $value, $filterBits, $indexableAnnotationConfig->fastIndexing ?? EncryptorInterface::DEFAULT_FAST_INDEXING);
@@ -319,25 +276,12 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
         return $value;
     }
 
-    /**
-     * @param null|string $value
-     * @return bool
-     */
     private function isValueEncrypted(?string $value): bool
     {
-        return $value !== null && strpos($value, $this->encryptor->getPrefix()) === 0;
+        return $value !== null && str_starts_with($value, $this->encryptor->getPrefix());
     }
 
-    /**
-     * @param object $entity
-     * @param \ReflectionProperty $refProperty
-     * @param $value
-     * @param bool $storeBlindIndex
-     * @param int $filterBits
-     * @param bool $fastIndexing
-     * @return mixed
-     */
-    private function storeValue(object $entity, \ReflectionProperty $refProperty, $value, bool $storeBlindIndex, int $filterBits, bool $fastIndexing = true)
+    private function storeValue(object $entity, \ReflectionProperty $refProperty, mixed $value, bool $storeBlindIndex, int $filterBits, bool $fastIndexing = true): mixed
     {
         if ($value === '') {
             return '';
@@ -356,14 +300,10 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
     }
 
     /**
-     * @param object $entity
-     * @param \ReflectionProperty $refProperty
-     * @param IndexableField|null $indexableAnnotationConfig
-     * @param mixed $value
      * @throws \Odandb\DoctrineCiphersweetEncryptionBundle\Exception\UndefinedGeneratorException
      * @throws \ReflectionException
      */
-    private function storeIndexes(object $entity, \ReflectionProperty $refProperty, ?IndexableField $indexableAnnotationConfig, $value): void
+    private function storeIndexes(object $entity, \ReflectionProperty $refProperty, ?IndexableField $indexableAnnotationConfig, mixed $value): void
     {
         if ($indexableAnnotationConfig === null) {
             return;
@@ -408,10 +348,8 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
 
     /**
      * Adds entity to decoded registry.
-     *
-     * @param object $entity Some doctrine entity
      */
-    private function addToDecodedRegistry($entity): void
+    private function addToDecodedRegistry(object $entity): void
     {
         $this->decodedRegistry[spl_object_id($entity)] = true;
     }
@@ -420,7 +358,7 @@ class DoctrineCiphersweetSubscriber implements EventSubscriber
      * Listen a postLoad lifecycle event. Checking and decrypt entities
      * which have @EncryptedField annotations.
      */
-    public function postLoad(LifecycleEventArgs $args): void
+    public function postLoad(PostLoadEventArgs $args): void
     {
         $entity = $args->getObject();
         if (!$this->hasInDecodedRegistry($entity) && $this->processFields($entity, $args->getObjectManager(), false)) {

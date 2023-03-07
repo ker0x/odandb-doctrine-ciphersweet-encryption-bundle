@@ -2,7 +2,6 @@ services:
   Odandb\DoctrineCiphersweetEncryptionBundle\Subscribers\DoctrineCiphersweetSubscriber:
     class: Odandb\DoctrineCiphersweetEncryptionBundle\Subscribers\DoctrineCiphersweetSubscriber
     arguments:
-      - "@annotation_reader"
       - "@Odandb\\DoctrineCiphersweetEncryptionBundle\\Encryptors\\CiphersweetEncryptor"
       - "@Odandb\\DoctrineCiphersweetEncryptionBundle\\Services\\IndexableFieldsService"
       - "@Odandb\\DoctrineCiphersweetEncryptionBundle\\Services\\PropertyHydratorService"
@@ -28,7 +27,6 @@ services:
     class: Odandb\DoctrineCiphersweetEncryptionBundle\Services\IndexableFieldsService
     public: true
     arguments:
-      - "@annotation_reader"
       - "@Doctrine\\ORM\\EntityManagerInterface"
       - "@Odandb\\DoctrineCiphersweetEncryptionBundle\\Services\\IndexesGenerator"
 

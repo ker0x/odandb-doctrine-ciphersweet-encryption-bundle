@@ -2,15 +2,10 @@
 
 declare(strict_types=1);
 
-
 namespace Odandb\DoctrineCiphersweetEncryptionBundle\Services\IndexesGenerators;
 
 class ValueEndingByGenerator implements IndexesGeneratorInterface
 {
-    /**
-     * @param string $value
-     * @return array
-     */
     public function generate(string $value): array
     {
         $possibleValues = [];
